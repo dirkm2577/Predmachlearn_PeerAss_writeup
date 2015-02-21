@@ -1,0 +1,148 @@
+---
+title: "Exercise Evaluation and Prediction Models"
+author: "Dirk Mischke"
+date: "February 20, 2015"
+output: html_document
+---
+## Executive Summary
+
+The data collected by Velloso et al. is data from 4 different sensors, one belt around the
+waist, one on the upper arm, one on the forearm and one on a dumbbell held by the participant.
+The sensors recorded the movements of the person during performing the specific weight 
+lifting exercise.
+
+The idea is to collect enough data from different ways of doing the exercise to be able to
+select a model, with which to predict when the exercise was performed correct and when not.
+
+We will use the provided Training data set with 19622 observations and 160 variables
+to try to find the best model to predict the quality of performance ('classe' variable)
+for the provided Test data set.
+
+Loading the Training data:
+```{r}
+trainurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(trainurl, destfile="~/Documents/Coursera/Data Science/Practical Machine Learning/Course Project/pml-training.csv", method="curl")
+train <- read.csv("pml-training.csv", header=TRUE, sep=",", na.strings=c("NA","#DIV/0!",""))
+```
+Loadind the Test data:
+```{r}
+testurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(testurl, destfile="~/Documents/Coursera/Data Science/Practical Machine Learning/Course Project/pml-testing.csv", method="curl")
+test <- read.csv("pml-testing.csv", header=TRUE, sep=",", na.strings=c("NA","#DIV/0!",""))
+```
+I transformed missing values and '#DIV/0' entries to 'NA' values.
+
+## Initial exploration of the Training data
+
+To find the best model to predict the quality of performance, we have to examine the data
+first, to gain some understanding about the available information and about which of the 
+present variables should be included in our analysis.
+
+```{r,include=FALSE}
+library(dplyr)
+library(caret)
+library(randomForest)
+```
+
+```{r,results='hide'}
+str(train)
+summary(train)
+```
+
+After taking a look at the structure and the summary of the training data set it is obvious that a large number of variables have more than 19200 'NA' entries or missing values. We can safely exclude those from our data set.
+
+## Cleaning the data
+
+Omitting all variables with more than 19200 NA's or missing values:
+
+```{r,comment=NA}
+train0 <- select(train, -starts_with("X"))
+train0 <- select(train0, -starts_with("raw_time"))
+train0 <- select(train0, -starts_with("new_window"))
+train0 <- select(train0, -starts_with("kurtosis"))
+train0 <- select(train0, -starts_with("skewness"))
+train0 <- select(train0, -starts_with("max_"))
+train0 <- select(train0, -starts_with("min_"))
+train0 <- select(train0, -starts_with("amplitude"))
+train0 <- select(train0, -starts_with("var_"))
+train0 <- select(train0, -starts_with("avg_"))
+train0 <- select(train0, -starts_with("stddev_"))
+```
+
+The factor variables 'user_name' and 'cvtd_timestamp' will also be omitted, because
+they are just identifiers and also not helpful in predicting the quality of the weight lifting exercise.
+
+```{r,comment=NA}
+train0 <- select(train0, -starts_with("user_"))
+train0 <- select(train0, -starts_with("cvtd_"))
+```
+Now we have a data set with 54 variables left for modeling.
+
+## Preprocessing
+
+```{r,comment=NA}
+inTrain <- createDataPartition(y=train0$classe, p=0.75, list=FALSE )
+train1 <- train0[inTrain,]
+test1 <- train0[-inTrain,]
+```
+
+To help us choose the right model approach we have to consider that the question at hand
+is better described by a classification model and not for example a regression model.
+We know that a powerful model is the random Forest method, which we will use for this
+case. A positive sideeffect is, that with random Forests we don't need cross validation
+to protect from overfitting.
+```{r,comment=NA}
+modran <- randomForest(classe ~ ., data=train1)
+predran1 <- predict(modran, test1, type = "class")
+confusionMatrix(predran1, test1$classe)
+```
+
+## Conclusion
+
+The overall accuracy of our chosen prediction model is 0.99, which is a very good
+value, giving confidence for predicting the actual Test data set. The out-of-sample
+error may be higher due to the complexity of the collected data. It is very difficult
+to predict movements and specifically if those movements are correct or represent
+a specific mistake. This is one of the insights of the original study, that there
+is almost an infinite amount of possible ways to do an exercise, which makes it very
+challenging to predict.
+
+## Cleaning the Test data set in similar fashion as the Training data set:
+```{r,comment=NA}
+test0 <- select(test, -starts_with("X"))
+test0 <- select(test0, -starts_with("user_"))
+test0 <- select(test0, -starts_with("raw_time"))
+test0 <- select(test0, -starts_with("cvtd_"))
+test0 <- select(test0, -starts_with("new_window"))
+test0 <- select(test0, -starts_with("kurtosis"))
+test0 <- select(test0, -starts_with("skewness"))
+test0 <- select(test0, -starts_with("max_"))
+test0 <- select(test0, -starts_with("min_"))
+test0 <- select(test0, -starts_with("amplitude"))
+test0 <- select(test0, -starts_with("var_"))
+test0 <- select(test0, -starts_with("avg_"))
+test0 <- select(test0, -starts_with("stddev_"))
+```
+
+## Creating submission files, applying the prediction model chosen from the analysis of the training data 
+
+```{r}
+predran0 <- predict(modran, test, type = "class")
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predran0)
+```
+
+Source:
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises#ixzz3SKam4z8q
+
